@@ -1,0 +1,32 @@
+from pymongo import MongoClient
+from bson.json_util import dumps
+from hashlib import md5
+
+def remove_duplicates(db_name, collection_name, unique_fields):
+    client = MongoClient('mongodb://localhost:27017/')
+    db = client[db_name]
+    collection = db[collection_name]
+
+    # Find duplicates
+    pipeline = [
+        {"$group": {
+            "_id": {field: f"${field}" for field in unique_fields},
+            "dups": {"$push": "$_id"},
+            "count": {"$sum": 1}
+        }},
+        {"$match": {"count": {"$gt": 1}}}
+    ]
+
+    duplicates = collection.aggregate(pipeline)
+
+    # Remove duplicates
+    for doc in duplicates:
+        ids = doc["dups"]
+        # Keep the first document and remove the rest
+        for id_to_remove in ids[1:]:
+            collection.delete_one({"_id": id_to_remove})
+
+if __name__ == "__main__":
+    remove_duplicates(
+"your_database_name", "your_collection_name", ["field1", "field2"]
+)
