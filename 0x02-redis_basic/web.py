@@ -1,40 +1,46 @@
-import requests
+#!/usr/bin/env python3
+"""In this tasks, we will implement a get_page function
+(prototype: def get_page(url: str) -> str:).
+It uses the requests module to obtain the HTML content
+of a particular URL and returns it.and cache the result with
+an expiration time of 10 seconds.
+"""
+
+
 import redis
-import time
-from requests.exceptions import RequestException
+import requests
+from functools import wraps
 
-# Connect to Redis
-cache = redis.Redis(host='localhost', port=6379, db=0)
+r = redis.Redis()
 
+
+def url_access_count(method):
+    """decorator for get_page function"""
+    @wraps(method)
+    def wrapper(url):
+        """wrapper function"""
+        key = "cached:" + url
+        cached_value = r.get(key)
+        if cached_value:
+            return cached_value.decode("utf-8")
+
+            # Get new content and update the cache
+        key_count = "count:" + url
+        html_content = method(url)
+
+        r.incr(key_count)
+        r.set(key, html_content, ex=10)
+        r.expire(key, 10)
+        return html_content
+    return wrapper
+
+
+@url_access_count
 def get_page(url: str) -> str:
-    try:
-        # Check if the URL is cached
-        cached_page = cache.get(url)
-        if cached_page:
-            # Increment the access count
-            cache.incr(f"count:{url}")
-            return cached_page.decode('utf-8')
-        
-        # Fetch the page content
-        response = requests.get(url)
-        page_content = response.text
-        
-        # Cache the result with an expiration time of 10 seconds
-        cache.setex(url, 10, page_content)
-        
-        # Initialize the access count
-        cache.set(f"count:{url}", 1)
-        
-        return page_content
-    except RequestException as e:
-        return f"Error fetching the page: {e}"
+    """obtain the HTML content of a particular"""
+    results = requests.get(url)
+    return results.text
 
-# Test the function
+
 if __name__ == "__main__":
-    test_url = ("http://slowwly.robertomurray.co.uk/delay/3000/url/"
-                "http://www.google.com")
-    print(get_page(test_url))
-    time.sleep(5)
-    print(get_page(test_url))
-    time.sleep(6)
-    print(get_page(test_url))
+    get_page('http://slowwly.robertomurray.co.uk')
